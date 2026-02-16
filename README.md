@@ -14,7 +14,7 @@ Scientific Writer performs comprehensive research before writing, ensuring every
 
 ### Prerequisites
 - Python 3.10-3.12
-- ANTHROPIC_API_KEY (required), OPENROUTER_API_KEY (optional for research lookup)
+- ANTHROPIC_API_KEY (optional, required if not running in a Claude Code environment configured for local LLMs), OPENROUTER_API_KEY (optional for research lookup)
 
 ### Installation Options
 
@@ -34,6 +34,14 @@ uv sync
 ```
 
 ### Configure API keys
+
+**Note on ANTHROPIC_API_KEY:**
+The `ANTHROPIC_API_KEY` is required if you are running the `scientific-writer` CLI or Python API directly and connecting to Anthropic's cloud services.
+
+However, if you are using Scientific Writer as a Claude Code plugin, and your Claude Code environment is configured to use a local LLM (e.g., via `llama.cpp`), then the `ANTHROPIC_API_KEY` might not be necessary. The `claude_agent_sdk` will attempt to use the LLM configured in your Claude Code environment.
+
+In such a local LLM setup, ensure that your Claude Code environment correctly maps the model names used by Scientific Writer (e.g., `claude-sonnet-4-5`, `claude-opus-4-5`) to your local model. You may need to configure your `llama.cpp` server or Claude Code settings to handle these model names.
+
 ```bash
 # .env file (recommended)
 echo "ANTHROPIC_API_KEY=your_key" > .env
@@ -103,6 +111,9 @@ asyncio.run(main())
 ## 🎯 Use as a Claude Code Plugin (Recommended)
 
 **Scientific Writer works best as a Claude Code (Cursor) plugin**, providing seamless access to all scientific writing capabilities directly in your IDE. No CLI required!
+
+**Note on API Keys for Plugin Usage:**
+If you're running Claude Code with a local LLM backend (e.g., `llama.cpp`), you generally **do not need to set the ANTHROPIC_API_KEY**. The plugin will route requests through your configured Claude Code environment. Just ensure your local LLM setup correctly maps the Claude model names (e.g., `claude-sonnet-4-5`) used by this tool.
 
 ### Quick Start - Plugin Installation
 
