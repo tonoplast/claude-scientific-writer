@@ -49,11 +49,6 @@ def get_api_key(api_key: Optional[str] = None) -> str:
         return api_key
     
     env_key = os.getenv("ANTHROPIC_API_KEY")
-    if not env_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY not found. Either pass api_key parameter or set "
-            "ANTHROPIC_API_KEY environment variable."
-        )
     return env_key
 
 

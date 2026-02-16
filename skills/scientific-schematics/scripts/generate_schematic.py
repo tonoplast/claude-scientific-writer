@@ -26,6 +26,33 @@ import sys
 from pathlib import Path
 
 
+def create_placeholder_svg(output_path, prompt):
+    """Creates a placeholder SVG image."""
+    # Ensure the output path has a .svg extension
+    output_path = Path(output_path).with_suffix(".svg")
+    
+    width = 800
+    height = 600
+    # Truncate prompt for display
+    display_prompt = prompt[:100] + '...' if len(prompt) > 100 else prompt
+    
+    svg_content = f"""<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+<rect width="100%" height="100%" fill="#f0f0f0" />
+<g text-anchor="middle">
+    <text x="50%" y="45%" font-size="24" fill="#888">Schematic Placeholder</text>
+    <text x="50%" y="55%" font-size="16" fill="#aaa">Prompt: "{display_prompt}"</text>
+    <text x="50%" y="65%" font-size="12" fill="#ccc">(OPENROUTER_API_KEY not set)</text>
+</g>
+</svg>"""
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(svg_content)
+        print(f"Placeholder schematic saved to: {output_path}")
+    except Exception as e:
+        print(f"Error creating placeholder SVG: {e}")
+        sys.exit(1)
+
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
@@ -92,13 +119,9 @@ Environment Variables:
     # Check for API key
     api_key = args.api_key or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        print("Error: OPENROUTER_API_KEY environment variable not set")
-        print("\nFor AI generation, you need an OpenRouter API key.")
-        print("Get one at: https://openrouter.ai/keys")
-        print("\nSet it with:")
-        print("  export OPENROUTER_API_KEY='your_api_key'")
-        print("\nOr use --api-key flag")
-        sys.exit(1)
+        print("Warning: OPENROUTER_API_KEY not set. Generating a placeholder image.")
+        create_placeholder_svg(args.output, args.prompt)
+        sys.exit(0)
     
     # Find AI generation script
     script_dir = Path(__file__).parent
@@ -132,6 +155,7 @@ Environment Variables:
     except Exception as e:
         print(f"Error executing AI generation: {e}")
         sys.exit(1)
+
 
 
 if __name__ == "__main__":

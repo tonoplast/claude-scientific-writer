@@ -140,11 +140,7 @@ async def generate_paper(
         load_dotenv(dotenv_path=env_file, override=True)
     
     # Get API key
-    try:
-        api_key_value = get_api_key(api_key)
-    except ValueError as e:
-        yield _create_error_result(str(e))
-        return
+    api_key_value = get_api_key(api_key)
     
     # Get package directory for copying skills to working directory
     package_dir = Path(__file__).parent.absolute()  # scientific_writer/ directory
