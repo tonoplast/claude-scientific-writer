@@ -29,10 +29,51 @@ Your context window will be automatically compacted as it approaches its limit, 
 - ✅ Verify every citation exists before adding to references.bib
 
 **Research-Lookup First Approach:**
-1. Before writing ANY section, perform extensive research-lookup
+1. Before writing ANY section, perform extensive research-lookup (uses Parallel Deep Research by default)
 2. Find 5-10 real papers per major section
 3. Begin writing, integrating ONLY the real papers found
 4. If additional citations needed, perform more research-lookup first
+
+## CRITICAL: Parallel Web Search Policy
+
+**Use Parallel Web Systems APIs for ALL web searches, URL extraction, and deep research.**
+
+Parallel is the **primary tool for all web-related operations**. Do NOT use the built-in WebSearch tool except as a last-resort fallback.
+
+**Required Environment Variable:** `PARALLEL_API_KEY`
+
+| Task | Tool | Command |
+|------|------|---------|
+| Web search (any) | `parallel-web` skill | `python scripts/parallel_web.py search "query" -o sources/search_<topic>.md` |
+| Extract URL content | `parallel-web` skill | `python scripts/parallel_web.py extract "url" -o sources/extract_<source>.md` |
+| Deep research | `parallel-web` skill | `python scripts/parallel_web.py research "query" --processor pro-fast -o sources/research_<topic>.md` |
+| Academic paper search | `research-lookup` skill | `python research_lookup.py "find papers on..." -o sources/papers_<topic>.md` (routes to Perplexity) |
+| DOI/metadata verification | `parallel-web` skill | `python scripts/parallel_web.py search -o sources/search_<topic>.md` or `extract` |
+| Current events/news | `parallel-web` skill | `python scripts/parallel_web.py search "news query" -o sources/search_<topic>.md` |
+
+## CRITICAL: Save All Research Results to Sources Folder
+
+**Every web search, URL extraction, deep research, and research-lookup result MUST be saved to the project's `sources/` folder using the `-o` flag.**
+
+This is non-negotiable. Research results are expensive to obtain and critical for reproducibility, auditability, and context window recovery.
+
+**Saving Rules:**
+
+| Operation | Filename Pattern | Example |
+|-----------|-----------------|---------|
+| Web Search | `search_YYYYMMDD_HHMMSS_<topic>.md` | `sources/search_20250217_143000_quantum_computing.md` |
+| URL Extract | `extract_YYYYMMDD_HHMMSS_<source>.md` | `sources/extract_20250217_143500_nature_article.md` |
+| Deep Research | `research_YYYYMMDD_HHMMSS_<topic>.md` | `sources/research_20250217_144000_ev_battery_market.md` |
+| Academic Paper Search | `papers_YYYYMMDD_HHMMSS_<topic>.md` | `sources/papers_20250217_144500_crispr_offtarget.md` |
+
+**Key Rules:**
+- **ALWAYS** use the `-o` flag to save results to `sources/` — never discard research output
+- **ALWAYS** ensure saved files preserve all citations, source URLs, and DOIs (the scripts do this automatically — text format includes a Sources/References section; `--json` preserves full citation objects)
+- **ALWAYS** check `sources/` for existing results before making new API calls (avoid duplicate queries)
+- **ALWAYS** log saved results: `[HH:MM:SS] SAVED: [type] to sources/[filename] ([N] words/results, [N] citations)`
+- The `sources/` folder provides a complete audit trail of all research conducted for the project
+- Saved results enable context window recovery — re-read from `sources/` instead of re-querying APIs
+- Use `--json` format when maximum citation metadata is needed for BibTeX generation or DOI verification
 
 ## Workflow Protocol
 
@@ -84,6 +125,7 @@ For specialized documents, use the dedicated skill which contains detailed templ
 | Market research reports | `market-research-reports` |
 | Literature reviews | `literature-review` |
 | Infographics | `infographics` |
+| Web search, URL extraction, deep research | `parallel-web` |
 
 **⚠️ INFOGRAPHICS: Do NOT use LaTeX or PDF compilation.** When the user asks for an infographic, use the `infographics` skill directly. Infographics are generated as standalone PNG images via Nano Banana Pro AI, not as LaTeX documents. No `.tex` files, no `pdflatex`, no BibTeX.
 
@@ -97,7 +139,7 @@ writing_outputs/
     ├── references/       # references.bib
     ├── figures/          # figure_01.png, figure_02.pdf
     ├── data/             # csv, json, xlsx
-    ├── sources/          # context materials
+    ├── sources/          # ALL research results (web search, deep research, URL extracts, paper lookups)
     └── final/            # manuscript.pdf, manuscript.tex
 ```
 
@@ -245,7 +287,7 @@ For each citation in references.bib:
 
 **Verification process:**
 1. Use research-lookup to find and verify paper exists
-2. Use WebSearch for metadata (DOI, volume, pages)
+2. Use `parallel_web.py search` or `parallel_web.py extract` for metadata (DOI, volume, pages)
 3. Cross-check at least 2 sources
 4. Log: `[HH:MM:SS] VERIFIED: [Author Year] ✅`
 
@@ -288,6 +330,7 @@ Before marking complete:
 - [ ] Version numbers incremented if editing
 - [ ] 100% citations are REAL papers from research-lookup
 - [ ] All citation metadata verified with DOIs
+- [ ] **All research results saved to `sources/`** (web searches, deep research, URL extracts, paper lookups)
 - [ ] **Graphical abstract generated** using scientific-schematics skill
 - [ ] **Minimum figure count met** (see table above)
 - [ ] **Figures generated extensively** using scientific-schematics and generate-image
@@ -313,6 +356,8 @@ Request: "Create a NeurIPS paper on attention mechanisms"
 
 ## Key Principles
 
+- **Use Parallel for ALL web searches** - `parallel_web.py search/extract/research` replaces WebSearch; WebSearch is last-resort fallback only
+- **SAVE ALL RESEARCH TO sources/** - every web search, URL extraction, deep research, and research-lookup result MUST be saved to `sources/` using the `-o` flag; check `sources/` before making new queries
 - **LaTeX is the default format**
 - **Consult venue-templates for writing style** - adapt tone, abstract format, and structure to target venue
 - **Research before writing** - lookup papers BEFORE writing each section

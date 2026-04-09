@@ -30,7 +30,7 @@ This is non-negotiable:
 - ✅ **100% requirement: All claims must be supported by real papers** or rephrased/removed
 
 **Research-Lookup First Approach:**
-1. Before writing ANY section, perform extensive research-lookup
+1. Before writing ANY section, perform extensive research-lookup (uses Parallel Deep Research by default)
 2. Find 5-10 real papers per major section (more for introduction)
 3. Verify each paper exists and is relevant
 4. Begin writing, integrating ONLY the real papers found
@@ -43,6 +43,56 @@ This is non-negotiable:
 - Still no papers after multiple searches? Remove the unsupported claim
 - Every citation in references.bib must correspond to a real paper you looked up
 - Be able to explain where you found each citation (e.g., "found via research-lookup query: 'transformer attention mechanisms'")
+
+## CRITICAL: Parallel Web Search Policy
+
+**Use Parallel Web Systems APIs for ALL web searches, URL extraction, and deep research.**
+
+Parallel is the **primary tool for all web-related operations**. Do NOT use the built-in WebSearch tool except as a last-resort fallback if Parallel is unavailable.
+
+**Required Environment Variable:** `PARALLEL_API_KEY`
+
+**Web Search & Research Tool Routing:**
+
+| Task | Tool | Command |
+|------|------|---------|
+| Web search (any) | `parallel-web` skill | `python scripts/parallel_web.py search "query" -o sources/search_<topic>.md` |
+| Extract URL content | `parallel-web` skill | `python scripts/parallel_web.py extract "url" --objective "focus" -o sources/extract_<source>.md` |
+| Deep research (any topic) | `parallel-web` skill | `python scripts/parallel_web.py research "query" --processor pro-fast -o sources/research_<topic>.md` |
+| Academic paper search | `research-lookup` skill | `python research_lookup.py "find papers on..." -o sources/papers_<topic>.md` (auto-routes to Perplexity) |
+| DOI/metadata verification | `parallel-web` skill | `python scripts/parallel_web.py search "DOI query" -o sources/search_<topic>.md` or `extract` |
+| Current events/news | `parallel-web` skill | `python scripts/parallel_web.py search "news query" -o sources/search_<topic>.md` |
+
+**Key Rules:**
+- Use `parallel_web.py search` instead of WebSearch for ALL web information gathering
+- Use `parallel_web.py extract` to read and extract content from any URL (gets clean LLM-optimized markdown)
+- Use `parallel_web.py research --processor pro-fast` for comprehensive research on any topic
+- Use `research_lookup.py` for academic-specific paper searches (auto-routes to Perplexity sonar-pro-search)
+- WebSearch should ONLY be used as a last-resort fallback if Parallel is unavailable
+
+## CRITICAL: Save All Research Results to Sources Folder
+
+**Every web search, URL extraction, deep research, and research-lookup result MUST be saved to the project's `sources/` folder using the `-o` flag.**
+
+This is non-negotiable. Research results are expensive to obtain and critical for reproducibility, auditability, and context window recovery.
+
+**Saving Rules:**
+
+| Operation | Filename Pattern | Example |
+|-----------|-----------------|---------|
+| Web Search | `search_YYYYMMDD_HHMMSS_<topic>.md` | `sources/search_20250217_143000_quantum_computing.md` |
+| URL Extract | `extract_YYYYMMDD_HHMMSS_<source>.md` | `sources/extract_20250217_143500_nature_article.md` |
+| Deep Research | `research_YYYYMMDD_HHMMSS_<topic>.md` | `sources/research_20250217_144000_ev_battery_market.md` |
+| Academic Paper Search | `papers_YYYYMMDD_HHMMSS_<topic>.md` | `sources/papers_20250217_144500_crispr_offtarget.md` |
+
+**Key Rules:**
+- **ALWAYS** use the `-o` flag to save results to `sources/` — never discard research output
+- **ALWAYS** ensure saved files preserve all citations, source URLs, and DOIs (the scripts do this automatically — text format includes a Sources/References section; `--json` preserves full citation objects)
+- **ALWAYS** check `sources/` for existing results before making new API calls (avoid duplicate queries)
+- **ALWAYS** log saved results: `[HH:MM:SS] SAVED: [type] to sources/[filename] ([N] words/results, [N] citations)`
+- The `sources/` folder provides a complete audit trail of all research conducted for the project
+- Saved results enable context window recovery — re-read from `sources/` instead of re-querying APIs
+- Use `--json` format when maximum citation metadata is needed for BibTeX generation or DOI verification
 
 ## Workflow Protocol
 
@@ -178,6 +228,7 @@ When the user requests "market research", "market analysis", "industry report", 
 - **Literature Reviews**: Use literature-review skill with systematic review structure
 - **Research Grants**: Use research-grants skill with funding agency requirements
 - **Infographics**: Use `infographics` skill directly — generates standalone PNG images via Nano Banana Pro AI. **Do NOT use LaTeX, pdflatex, or BibTeX for infographics.**
+- **Web search, URL extraction, deep research**: Use `parallel-web` skill for ALL web operations
 
 2. **Present Brief Plan**
    - Outline main approach and structure
@@ -312,7 +363,7 @@ writing_outputs/
     ├── data/
     │   └── [data files: csv, json, xlsx, etc.]
     ├── sources/
-    │   └── [context/reference materials: .md, .docx, .pdf, etc.]
+    │   └── [ALL research results: web search, deep research, URL extracts, paper lookups, context materials]
     └── final/
         ├── manuscript.pdf          # Final compiled PDF
         ├── manuscript.tex          # Final LaTeX source
@@ -610,9 +661,12 @@ drafts/
    - Find actual papers with real authors, titles, and publication details
    - Verify each paper exists and is relevant before citing
    - Only cite papers you have actually looked up and verified
+   - **ALWAYS save results to `sources/` using the `-o` flag** — never discard research output
+   - **Check `sources/` first** — re-read existing results instead of making duplicate API calls
    
    **Research Logging:**
    - Print: `[HH:MM:SS] RESEARCH: Query "[search terms]" - Found [N] REAL papers`
+   - Print: `[HH:MM:SS] SAVED: Research results to sources/[filename] ([N] words/papers)`
    - Update progress.md with verified papers list and totals
 
 3. **Write Section Content - ONLY WITH REAL CITATIONS**
@@ -879,7 +933,7 @@ Verify for each citation:
 **Step 4: Verification Process**
 
 1. Look up via research-lookup for finding papers and scholarly content
-2. **Use WebSearch for basic metadata lookup** (DOI, year, journal, volume, pages, publisher)
+2. **Use `parallel_web.py search` or `parallel_web.py extract` for metadata lookup** (DOI, year, journal, volume, pages, publisher)
 3. Verify against official sources (DOI resolver, Google Scholar, PubMed, arXiv)
 4. Cross-check at least 2 sources
 5. Use citation keys: `firstauthor_year_keyword` (lowercase, meaningful)
@@ -887,8 +941,9 @@ Verify for each citation:
 7. Log verification: `[HH:MM:SS] VERIFIED: [Author Year] - all fields present ✅`
 
 **Available Research Tools:**
-- **research-lookup**: Primary tool for finding academic papers, literature search, and scholarly research
-- **WebSearch**: Use for quick metadata verification, looking up DOIs, checking publication years, finding journal names, volume/page numbers, and general information that complements academic research
+- **parallel-web** (`parallel_web.py`): Primary tool for ALL web searches, URL extraction, deep research, metadata verification, DOI lookups, and general information
+- **research-lookup** (`research_lookup.py`): Routes to Parallel Deep Research (default) or Perplexity sonar-pro-search (academic paper searches)
+- **WebSearch**: Last-resort fallback only — use `parallel_web.py search` instead
 
 **Quality Standards**
 - **100% citations must be REAL papers found via research-lookup**
@@ -1417,6 +1472,7 @@ Before marking task complete, verify:
 - [ ] **revision_notes.md updated** with changes
 - [ ] **100% citations are REAL papers** (no placeholders/invented)
 - [ ] **All citations found through research-lookup** (no illustrative examples)
+- [ ] **All research results saved to `sources/`** (web searches, deep research, URL extracts, paper lookups)
 - [ ] Citations complete and correct
 - [ ] **All citation metadata verified** (required fields, DOIs)
 - [ ] **At least 95% citations verified from primary sources**
@@ -1493,10 +1549,12 @@ Request: "Create 15-minute slides on my CRISPR research"
 
 ## Remember
 
+- **Use Parallel for ALL web searches** - `parallel_web.py search/extract/research` replaces WebSearch; WebSearch is last-resort fallback only
+- **SAVE ALL RESEARCH TO sources/** - every web search, URL extraction, deep research, and research-lookup result MUST be saved to `sources/` using the `-o` flag; check `sources/` before making new queries
 - **Plan first, execute second** - ALWAYS present plan then start immediately
 - **LaTeX is the default format** - always use LaTeX unless explicitly told otherwise
 - **Skeleton first, content second** - create full LaTeX structure before writing content
-- **Research before writing** - lookup relevant papers for each section BEFORE writing
+- **Research before writing** - lookup relevant papers for each section BEFORE writing (research-lookup uses Parallel Deep Research by default)
 - **ONLY REAL CITATIONS** - NEVER use placeholder, illustrative, or invented citations; use research-lookup extensively to find actual papers
 - **One section at a time** - complete each section fully before moving to the next
 - **Use BibTeX for all citations** - maintain references.bib file with complete entries
