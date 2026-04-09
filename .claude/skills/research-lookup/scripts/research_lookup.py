@@ -36,14 +36,13 @@ class ResearchLookup:
     def __init__(self, force_model: Optional[str] = None):
         """
         Initialize the research lookup tool.
-        
+
         Args:
-            force_model: Optional model override ('pro' or 'reasoning'). 
+            force_model: Optional model override ('pro' or 'reasoning').
                         If None, model is auto-selected based on query complexity.
         """
         self.api_key = os.getenv("OPENROUTER_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY environment variable not set")
+        self.has_api_key = bool(self.api_key)
 
         self.base_url = "https://openrouter.ai/api/v1"
         self.force_model = force_model
@@ -152,10 +151,171 @@ RESPONSE FORMAT:
 
 Remember: Quality over quantity. Prioritize influential, highly-cited papers from prestigious venues and established researchers."""
 
+    def _format_papers(self, papers: List[Dict], source: str) -> tuple:
+        """Format a list of paper dicts into response text and citations list."""
+        lines = [f"Source: {source} (free fallback — OPENROUTER_API_KEY not set)\n", "=" * 60]
+        citations = []
+        for i, paper in enumerate(papers, 1):
+            title = paper.get("title", "Unknown title")
+            authors = paper.get("authors", [])
+            author_str = ", ".join(a.get("name", "") for a in authors[:3])
+            if len(authors) > 3:
+                author_str += " et al."
+            year = paper.get("year", "n.d.")
+            venue = paper.get("venue", "")
+            cite_count = paper.get("citationCount", "")
+            abstract = paper.get("abstract") or ""
+            doi = paper.get("doi", "")
+            url = paper.get("url", "")
+
+            lines.append(f"\n[{i}] {title}")
+            lines.append(f"    Authors: {author_str}")
+            info = f"    Year: {year}"
+            if venue:
+                info += f"  |  Venue: {venue}"
+            if cite_count != "":
+                info += f"  |  Cited: {cite_count}×"
+            lines.append(info)
+            if abstract:
+                lines.append(f"    Abstract: {abstract[:300]}{'...' if len(abstract) > 300 else ''}")
+            if doi:
+                lines.append(f"    DOI: https://doi.org/{doi}")
+                citations.append({"type": "doi", "doi": doi, "url": f"https://doi.org/{doi}"})
+            elif url:
+                lines.append(f"    URL: {url}")
+                citations.append({"type": "url", "url": url})
+        return "\n".join(lines), citations
+
+    def _try_semantic_scholar(self, query: str) -> Optional[List[Dict]]:
+        """Try Semantic Scholar API. Returns list of paper dicts or None on failure."""
+        search_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        params = {
+            "query": query,
+            "limit": 10,
+            "fields": "title,authors,year,abstract,citationCount,venue,externalIds,openAccessPdf"
+        }
+        resp = requests.get(search_url, params=params, timeout=30,
+                            headers={"User-Agent": "ScientificWriter/1.0"})
+        resp.raise_for_status()
+        raw = resp.json().get("data", [])
+        papers = []
+        for p in raw:
+            papers.append({
+                "title": p.get("title", ""),
+                "authors": p.get("authors", []),
+                "year": p.get("year", ""),
+                "venue": p.get("venue", ""),
+                "citationCount": p.get("citationCount", ""),
+                "abstract": p.get("abstract", ""),
+                "doi": (p.get("externalIds") or {}).get("DOI", ""),
+                "url": (p.get("openAccessPdf") or {}).get("url", ""),
+            })
+        return papers if papers else None
+
+    def _try_pubmed(self, query: str) -> Optional[List[Dict]]:
+        """Try PubMed E-utilities API. Returns list of paper dicts or None on failure."""
+        base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+        # Step 1: search for IDs
+        search_resp = requests.get(
+            f"{base}/esearch.fcgi",
+            params={"db": "pubmed", "term": query, "retmax": 10, "retmode": "json"},
+            timeout=30, headers={"User-Agent": "ScientificWriter/1.0"}
+        )
+        search_resp.raise_for_status()
+        ids = search_resp.json().get("esearchresult", {}).get("idlist", [])
+        if not ids:
+            return None
+
+        # Step 2: fetch summaries
+        summary_resp = requests.get(
+            f"{base}/esummary.fcgi",
+            params={"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
+            timeout=30, headers={"User-Agent": "ScientificWriter/1.0"}
+        )
+        summary_resp.raise_for_status()
+        result = summary_resp.json().get("result", {})
+
+        papers = []
+        for pmid in ids:
+            doc = result.get(pmid, {})
+            if not doc:
+                continue
+            authors_raw = doc.get("authors", [])
+            authors = [{"name": a.get("name", "")} for a in authors_raw]
+            pub_date = doc.get("pubdate", "")
+            year = pub_date[:4] if pub_date else ""
+            source = doc.get("source", "")
+            eloc = doc.get("elocationid", "")
+            doi = ""
+            if "doi:" in eloc.lower():
+                doi = eloc.split("doi:")[-1].strip()
+            papers.append({
+                "title": doc.get("title", ""),
+                "authors": authors,
+                "year": year,
+                "venue": source,
+                "citationCount": "",
+                "abstract": "",
+                "doi": doi,
+                "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if not doi else "",
+            })
+        return papers if papers else None
+
+    def _fallback_lookup(self, query: str) -> Dict[str, Any]:
+        """Fallback using free APIs (Semantic Scholar, then PubMed) when no API key."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Try Semantic Scholar first
+        try:
+            papers = self._try_semantic_scholar(query)
+            if papers:
+                content, citations = self._format_papers(papers, "Semantic Scholar")
+                return {
+                    "success": True,
+                    "query": query,
+                    "response": f"Research results for: {query}\n\n{content}",
+                    "citations": citations,
+                    "sources": citations,
+                    "timestamp": timestamp,
+                    "model": "semantic-scholar-free",
+                    "usage": {}
+                }
+        except Exception as e:
+            print(f"Semantic Scholar failed ({e}), trying PubMed...", file=__import__("sys").stderr)
+
+        # Fall back to PubMed
+        try:
+            papers = self._try_pubmed(query)
+            if papers:
+                content, citations = self._format_papers(papers, "PubMed")
+                return {
+                    "success": True,
+                    "query": query,
+                    "response": f"Research results for: {query}\n\n{content}",
+                    "citations": citations,
+                    "sources": citations,
+                    "timestamp": timestamp,
+                    "model": "pubmed-free",
+                    "usage": {}
+                }
+        except Exception as e:
+            print(f"PubMed also failed: {e}", file=__import__("sys").stderr)
+
+        return {
+            "success": False,
+            "query": query,
+            "error": "All free fallbacks failed (Semantic Scholar + PubMed). Set OPENROUTER_API_KEY for full functionality.",
+            "timestamp": timestamp,
+            "model": "fallback"
+        }
+
     def lookup(self, query: str) -> Dict[str, Any]:
         """Perform a research lookup for the given query."""
+        if not self.has_api_key:
+            return self._fallback_lookup(query)
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Select model based on query complexity
         model = self._select_model(query)
 
@@ -377,14 +537,8 @@ def main():
         else:
             print(text)
 
-    # Check for API key
     if not os.getenv("OPENROUTER_API_KEY"):
-        print("Error: OPENROUTER_API_KEY environment variable not set", file=sys.stderr)
-        print("Please set it in your .env file or export it:", file=sys.stderr)
-        print("  export OPENROUTER_API_KEY='your_openrouter_api_key'", file=sys.stderr)
-        if output_file:
-            output_file.close()
-        return 1
+        print("Warning: OPENROUTER_API_KEY not set — using Semantic Scholar free fallback.", file=sys.stderr)
 
     try:
         research = ResearchLookup(force_model=args.force_model)
@@ -433,7 +587,7 @@ def main():
                 # Display API-provided sources first (most reliable)
                 sources = result.get("sources", [])
                 if sources:
-                    write_output(f"\n📚 Sources ({len(sources)}):")
+                    write_output(f"\nSources ({len(sources)}):")
                     for j, source in enumerate(sources):
                         title = source.get("title", "Untitled")
                         url = source.get("url", "")
@@ -447,7 +601,7 @@ def main():
                 citations = result.get("citations", [])
                 text_citations = [c for c in citations if c.get("type") in ("doi", "url")]
                 if text_citations:
-                    write_output(f"\n🔗 Additional References ({len(text_citations)}):")
+                    write_output(f"\nAdditional References ({len(text_citations)}):")
                     for j, citation in enumerate(text_citations):
                         if citation.get("type") == "doi":
                             write_output(f"  [{j+1}] DOI: {citation.get('doi', '')} - {citation.get('url', '')}")
